@@ -16,9 +16,9 @@ import copy
 from tqdm import tqdm
 from tqdm import trange
 
-from deepbayes.optimizers import optimizer
-from deepbayes.optimizers import losses
-from deepbayes import analyzers
+from deepbayesHF.optimizers import optimizer
+from deepbayesHF.optimizers import losses
+from deepbayesHF import analyzers
 from abc import ABC, abstractmethod
 
 class HamiltonianMonteCarlo(optimizer.Optimizer):

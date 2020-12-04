@@ -18,7 +18,7 @@ from tqdm import tqdm
 from tqdm import trange
 
 import tensorflow_probability as tfp
-from deepbayes import analyzers
+from deepbayesHF import analyzers
 
 # A dumb mistake on my part which needs to be factored out
 def softplus(x):
