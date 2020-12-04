@@ -1,2 +1,2 @@
-# deepbayesHF
-Hot fixes for those working with deepbayes before the a stable pip version comes out
+# deepbayes
+Optimizers for performing approximate Bayesian inference on neural network parameters with Tensorflow and JAX
