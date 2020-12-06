@@ -97,7 +97,7 @@ def FGSM(model, inp, loss_fn, eps, direction=-1, num_models=1, order=1):
     #print("GRAD: ", grad[0])
     adv = inp + eps*np.asarray(grad)
     adv = np.clip(adv, mini, maxi)
-    adv = np.clip(adv, 0, 1)
+    adv = np.clip(adv, model.input_lower, model.input_upper)
     return adv
 
 
@@ -144,7 +144,7 @@ def _PGD(model, inp, loss_fn, eps, direc=-1, step=0.1, num_steps=15, num_models=
     adv = np.asarray(inp)
     maxi = adv + eps; mini = adv - eps
     adv = adv + ((eps/10) * np.sign(np.random.normal(0.0, 1.0, size=adv.shape)))
-    adv = np.clip(adv, 0.0, 1.0)
+    adv = np.clip(adv, model.input_lower, model.input_upper)
     #print("PERFORMING PGD")
     for j in range(num_steps+1):
         if(order == 1):
@@ -160,7 +160,7 @@ def _PGD(model, inp, loss_fn, eps, direc=-1, step=0.1, num_steps=15, num_models=
         adv = adv + grad
         adv = tf.cast(adv, 'float32')
     adv = np.clip(adv, mini, maxi)
-    adv = np.clip(adv, 0, 1)
+    adv = np.clip(adv, model.input_lower, model.input_upper)
     return adv
 
 def PGD(model, inp, loss_fn, eps, direction=-1, step=0.1, num_steps=5, num_models=-1, order=1, restarts=0):
@@ -218,9 +218,9 @@ def CW(model, inp, loss_fn, eps=0.01, num_steps=5, num_models=25, direction=-1,
         d *= (eps/float(num_steps))
         adv = adv + d
         #adv = np.clip(adv, 0, 1)
-        adv = np.clip(adv, 0, 1)
+        adv = np.clip(adv, model.input_lower, model.input_upper)
     adv = np.clip(adv, mini, maxi)
-    adv = np.clip(adv, 0, 1)
+    adv = np.clip(adv, model.input_lower, model.input_upper)
     return adv
 
 # Substitute Model Attack

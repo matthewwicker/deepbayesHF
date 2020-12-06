@@ -47,8 +47,8 @@ def propagate_interval(W, b, x_l, x_u):
     return h_l, h_u
 
 def IBP(model, inp, weights, eps, predict=False):
-    h_u = tf.clip_by_value(tf.math.add(inp, eps), 0.0, 1.0)
-    h_l = tf.clip_by_value(tf.math.subtract(inp, eps), 0.0, 1.0)
+    h_u = tf.clip_by_value(tf.math.add(inp, eps), model.input_lower, model.input_upper)
+    h_l = tf.clip_by_value(tf.math.subtract(inp, eps), model.input_lower, model.input_upper)
     layers = model.model.layers
     offset = 0
     for i in range(len(layers)):
