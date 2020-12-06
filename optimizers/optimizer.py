@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 import os
 import copy
 import math
+import pickle
 import logging
 import numpy as np
 import tensorflow as tf
@@ -31,6 +32,7 @@ class Optimizer(ABC):
     @abstractmethod
     def compile(self, keras_model, loss_fn, batch_size, learning_rate, decay,
                       epochs, prior_mean, prior_var, **kwargs):
+        
         self.model = keras_model
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -52,24 +54,33 @@ class Optimizer(ABC):
         self.train_loss = tf.keras.metrics.Mean(name="train_loss")
         self.valid_loss = tf.keras.metrics.Mean(name="valid_loss")
 
-        # Right now I only have one accessory metric. Will come back and add 
+        # Right now I only have one accessory metric. Will come back and variably
         # many later. 
         self.train_metric = kwargs.get('metric', tf.keras.metrics.SparseCategoricalAccuracy(name="train_acc"))
         self.valid_metric = kwargs.get('metric', tf.keras.metrics.SparseCategoricalAccuracy(name="valid_acc"))
         self.extra_metric = kwargs.get('metric', tf.keras.metrics.SparseCategoricalAccuracy(name="extra_acc"))
 
+
         self.robust_train = kwargs.get('robust_train', 0)
         if(self.robust_train != 0):
-            print("BayesKeras: Detected robust training at compilation. Please ensure you have selected a robust-compatible loss")
-            self.epochs += 1
+            print("deepbayes: Detected robust training at compilation. Please ensure you have selected a robust-compatible loss")
         self.epsilon = kwargs.get('epsilon', 0.1) 
         self.robust_lambda = kwargs.get('rob_lam', 0.5)
         self.robust_linear = kwargs.get('linear_schedule', True)        
+        if(self.robust_linear):
+            self.epochs += 1
 
+        # incase one wants to attack with something that is not the training loss function
         self.attack_loss = tf.keras.losses.SparseCategoricalCrossentropy()
 
+        # For monte-carlo integration over robust loss
         self.loss_monte_carlo = kwargs.get('loss_mc', 2)
         self.eps_dist = tfp.distributions.Exponential(rate = 1.0/float(self.epsilon))
+
+        # Add some data-dependant bounds (lower and upper bounds per feature dimension)
+        self.input_upper = math.inf
+        self.input_lower = -math.inf
+
 
         self.acc_log = []
         self.rob_log = []
@@ -224,6 +235,15 @@ class Optimizer(ABC):
             os.makedirs(path)
         np.save(path+"/mean", np.asarray(self.posterior_mean))
         np.save(path+"/var", np.asarray(self.posterior_var))
+
+        self.info = {}
+        for k, v in self.__dict__.items():
+            if(type(v) == int or type(v) == float):
+                print((k,v))
+                self.info[k] = v
+        with open(path + '/info.pkl', 'wb') as f:
+            pickle.dump(self.info, f, pickle.HIGHEST_PROTOCOL)
+
         self.model.save(path+'/model.h5')
         model_json = self.model.to_json()
         with open(path+"/arch.json", "w") as json_file:
