@@ -5,9 +5,7 @@ from statsmodels.stats.proportion import proportion_confint
 import math
 import numpy as np
 import tensorflow as tf
-
-
-
+from tqdm import trange
 
 def propagate_interval(W, b, x_l, x_u, marg=0):
     mu = tf.divide(tf.math.add(x_u, x_l), 2)
@@ -104,7 +102,7 @@ Given a set of possibly overlapping intervals:
 def compute_interval_probs_weight(vector_intervals, marg, mean, std):
     means = mean; stds = std
     prob_vec = np.zeros(vector_intervals[0].shape)
-    for i in range(len(vector_intervals[0])):
+    for i in trange(len(vector_intervals[0])):
         for j in range(len(vector_intervals[0][0])):
             intervals = []
             for num_found in range(len(vector_intervals)):
