@@ -33,6 +33,8 @@ class Optimizer(ABC):
     def compile(self, keras_model, loss_fn, batch_size, learning_rate, decay,
                       epochs, prior_mean, prior_var, **kwargs):
         
+        self.mode = kwargs.get('mode', 'classification')
+        
         self.model = keras_model
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -56,9 +58,15 @@ class Optimizer(ABC):
 
         # Right now I only have one accessory metric. Will come back and variably
         # many later. 
-        self.train_metric = kwargs.get('metric', tf.keras.metrics.SparseCategoricalAccuracy(name="train_acc"))
-        self.valid_metric = kwargs.get('metric', tf.keras.metrics.SparseCategoricalAccuracy(name="valid_acc"))
-        self.extra_metric = kwargs.get('metric', tf.keras.metrics.SparseCategoricalAccuracy(name="extra_acc"))
+        if(self.mode == 'classification'):
+            self.train_metric = kwargs.get('metric', tf.keras.metrics.SparseCategoricalAccuracy(name="train_acc"))
+            self.valid_metric = kwargs.get('metric', tf.keras.metrics.SparseCategoricalAccuracy(name="valid_acc"))
+            self.extra_metric = kwargs.get('metric', tf.keras.metrics.SparseCategoricalAccuracy(name="extra_acc"))
+
+        if(self.mode == 'regression'):
+            self.train_metric = kwargs.get('metric', tf.keras.metrics.RootMeanSquaredError(name="train_mse"))
+            self.valid_metric = kwargs.get('metric', tf.keras.metrics.RootMeanSquaredError(name="valid_mse"))
+            self.extra_metric = kwargs.get('metric', tf.keras.metrics.RootMeanSquaredError(name="extra_mse"))
 
 
         self.robust_train = kwargs.get('robust_train', 0)
@@ -150,8 +158,11 @@ class Optimizer(ABC):
 
     def logging(self, loss, acc, val_loss, val_acc, epoch):
         # Local logging
+        tag = 'mse'
+        if(self.mode == 'regression'):
+            tag = 'err'
         if(self.robust_train == 0):
-            template = "Epoch {}, loss: {:.3f}, acc: {:.3f}, val_loss: {:.3f}, val_acc: {:.3f}" 
+            template = "Epoch {}, loss: {:.3f}, %s: {:.3f}, val_loss: {:.3f}, val_%s: {:.3f}"%(tag, tag)
             print (template.format(epoch+1, loss,
                          acc,
                          val_loss,
@@ -176,7 +187,7 @@ class Optimizer(ABC):
         return sampled_weights
 
     def _gen_implicit_prior(self):
-        print("BayesKeras: Using implicit prior")
+        print("deepbayes: Using implicit prior")
         prior_mean = []
         prior_var = []
         for i in range(len(self.model.layers)):

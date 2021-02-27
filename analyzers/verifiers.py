@@ -23,7 +23,7 @@ def propagate_interval(W, b, x_l, x_u, marg=0):
     h_l = tf.math.subtract(mu_new, rad)
     return h_l, h_u
 
-def IBP_state(model, s0, s1, weights, weight_margin=0):
+def IBP_state(model, s0, s1, weights, weight_margin=0, logits=True):
     h_l = s0
     h_u = s1
     layers = model.model.layers
@@ -38,8 +38,9 @@ def IBP_state(model, s0, s1, weights, weight_margin=0):
         sigma = model.posterior_var[2*(i-offset)]
         marg = weight_margin*sigma
         h_l, h_u = propagate_interval(w, b, h_l, h_u, marg=marg)
-        h_l = model.model.layers[i].activation(h_l)
-        h_u = model.model.layers[i].activation(h_u)
+        if(i < len(layers)-1):
+            h_l = model.model.layers[i].activation(h_l)
+            h_u = model.model.layers[i].activation(h_u)
     return h_l, h_u
 
 
@@ -85,11 +86,13 @@ of the document
 """
 import math
 from scipy.special import erf
-def compute_erf_prob(intervals, mean, stddev):
+def compute_erf_prob(intervals, mean, var):
     prob = 0.0
     for interval in intervals:
-        val1 = erf((mean-interval[0])/(math.sqrt(2)*(stddev)))
-        val2 = erf((mean-interval[1])/(math.sqrt(2)*(stddev)))
+#        val1 = erf((mean-interval[0])/(math.sqrt(2)*(stddev)))
+#        val2 = erf((mean-interval[1])/(math.sqrt(2)*(stddev)))
+        val1 = erf((mean-interval[0])/(math.sqrt(2*(var))))
+        val2 = erf((mean-interval[1])/(math.sqrt(2*(var))))
         prob += 0.5*(val1-val2)
     return prob
 
@@ -99,16 +102,16 @@ Given a set of possibly overlapping intervals:
     - compute probability of these disjoint intervals
     - do this for ALL values in a weight matrix
 """
-def compute_interval_probs_weight(vector_intervals, marg, mean, std):
-    means = mean; stds = std
+def compute_interval_probs_weight(vector_intervals, marg, mean, var):
+    means = mean; # vars = var
     prob_vec = np.zeros(vector_intervals[0].shape)
     for i in trange(len(vector_intervals[0])):
         for j in range(len(vector_intervals[0][0])):
             intervals = []
             for num_found in range(len(vector_intervals)):
-                interval = [vector_intervals[num_found][i][j]-(stds[i][j]*marg), vector_intervals[num_found][i][j]+(stds[i][j]*marg)]
+                interval = [vector_intervals[num_found][i][j]-(var[i][j]*marg), vector_intervals[num_found][i][j]+(var[i][j]*marg)]
                 intervals.append(interval)
-            p = compute_erf_prob(merge_intervals(intervals), means[i][j], stds[i][j])
+            p = compute_erf_prob(merge_intervals(intervals), means[i][j], var[i][j])
             prob_vec[i][j] = p
     return np.asarray(prob_vec)
 
@@ -118,16 +121,16 @@ Given a set of possibly overlapping intervals:
     - compute probability of these disjoint intervals
     - do this for ALL values in a *flat* bias matrix (vector)
 """
-def compute_interval_probs_bias(vector_intervals, marg, mean, std):
-    means = mean; stds = std
+def compute_interval_probs_bias(vector_intervals, marg, mean, var):
+    means = mean; #stds = var
     prob_vec = np.zeros(vector_intervals[0].shape)
     for i in range(len(vector_intervals[0])):
         intervals = []
         for num_found in range(len(vector_intervals)):
             #!*! Need to correct and make sure you scale margin
-            interval = [vector_intervals[num_found][i]-(stds[i]*marg), vector_intervals[num_found][i]+(std[i]*marg)]
+            interval = [vector_intervals[num_found][i]-(var[i]*marg), vector_intervals[num_found][i]+(var[i]*marg)]
             intervals.append(interval)
-        p = compute_erf_prob(merge_intervals(intervals), means[i], stds[i])
+        p = compute_erf_prob(merge_intervals(intervals), means[i], var[i])
         prob_vec[i] = p
     return np.asarray(prob_vec)
         
@@ -140,20 +143,51 @@ def compute_probability(model, weight_intervals, margin, verbose=True):
     # for every weight vector, get the intervals
     for i in func(len(model.posterior_mean)):
         if(i % 2 == 0): # then its a weight vector
-            p = compute_interval_probs_weight(weight_intervals[i], margin, model.posterior_mean[i], np.sqrt(model.posterior_var[i])**2)
+#            p = compute_interval_probs_weight(weight_intervals[i], margin, model.posterior_mean[i], np.square(model.posterior_var[i]))
+            p = compute_interval_probs_weight(weight_intervals[i], margin, model.posterior_mean[i], np.asarray(model.posterior_var[i]))
         else:
-            p = compute_interval_probs_bias(weight_intervals[i], margin, model.posterior_mean[i], np.sqrt(model.posterior_var[i])**2)
+#            p = compute_interval_probs_bias(weight_intervals[i], margin, model.posterior_mean[i], np.square(model.posterior_var[i]))
+            p = compute_interval_probs_bias(weight_intervals[i], margin, model.posterior_mean[i], np.asarray(model.posterior_var[i]))
+        #print("Average weight prob: ", np.mean(p))
         p = np.prod(p)
         full_p *= p
     return full_p
 
-def IBP_prob(model, s0, s1, w_marg, samples, predicate, i0=0):
+def IBP_prob(model, s0, s1, w_marg, samples, predicate, i0=0, inflate=1.0):
+    w_marg = w_marg**2
     safe_weights = []
     safe_outputs = []
     for i in range(samples):
-        model.model.set_weights(model.sample())
+        model.model.set_weights(model.sample(inflate=inflate))
         ol, ou = IBP_state(model, s0, s1, model.model.get_weights(), w_marg)
         if(predicate(np.squeeze(s0), np.squeeze(s1), np.squeeze(ol), np.squeeze(ou))):
+            safe_weights.append(model.model.get_weights())
+            ol = np.squeeze(ol); ou = np.squeeze(ou)
+            #lower = np.squeeze(s0)[0:len(ol)] + ol; upper = np.squeeze(s1)[0:len(ou)] + ou
+            safe_outputs.append([-1,1]) # This is used ONLY for control loops which needs its own verification section
+    print("Found %s safe intervals"%(len(safe_weights)))
+    if(len(safe_weights) < 2):
+        return 0.0, -1
+    p = compute_probability(model, np.swapaxes(np.asarray(safe_weights),1,0), w_marg)
+    return p, np.squeeze(safe_outputs)
+
+
+def IBP_upper(model, s0, s1, w_marg, samples, predicate, inputs=[], inflate=1.0):
+    w_marg = w_marg**2
+    safe_weights = []
+    safe_outputs = []
+    for i in range(samples):
+        model.model.set_weights(model.sample(inflate=inflate))
+        checks = []
+        ol, ou = IBP_state(model, s0, s1, model.model.get_weights(), w_marg)
+        checks.append(predicate(np.squeeze(s0), np.squeeze(s1), np.squeeze(ol), np.squeeze(ou)))
+        unsafe = False
+        for inp in inputs:
+            ol, ou = IBP_state(model, inp, inp, model.model.get_weights(), w_marg)
+            if(predicate(np.squeeze(inp), np.squeeze(inp), np.squeeze(ol), np.squeeze(ou))):
+                unsafe = True
+                break
+        if(unsafe):
             safe_weights.append(model.model.get_weights())
             ol = np.squeeze(ol); ou = np.squeeze(ou)
             lower = np.squeeze(s0)[0:len(ol)] + ol; upper = np.squeeze(s1)[0:len(ou)] + ou
@@ -163,7 +197,6 @@ def IBP_prob(model, s0, s1, w_marg, samples, predicate, i0=0):
         return 0.0, -1
     p = compute_probability(model, np.swapaxes(np.asarray(safe_weights),1,0), w_marg)
     return p, np.squeeze(safe_outputs)
-
 
 def IBP_prob_w(model, s0, s1, w_marg, w, predicate, i0=0):
     model.model.set_weights(model.sample())

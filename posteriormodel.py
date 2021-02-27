@@ -57,7 +57,7 @@ class PosteriorModel():
         self.input_upper = info_dict['input_upper']
         self.input_lower = info_dict['input_lower']
 
-    def sample(self):
+    def sample(self, inflate=1.0):
         """Returns a list of size 2x`n_layers` (a weight followed by a bias for each layer).
         this class does not set the weight of the posterior to this sample. Follow this call
         with the .set_weights() command for that action. 
@@ -70,7 +70,7 @@ class PosteriorModel():
             sampled_weights = []
             for i in range(len(self.posterior_mean)):
                 sampled_weights.append(np.random.normal(loc=self.posterior_mean[i],
-                                                    scale=self.posterior_var[i]))
+                                                    scale=inflate*np.sqrt(self.posterior_var[i])))
         elif(self.sample_based):
             index = np.random.choice(range(self.num_post_samps), p=self.frequency)
             sampled_weights = np.load(self.path_to_model+"/samples/sample_%s.npy"%(index), allow_pickle=True)

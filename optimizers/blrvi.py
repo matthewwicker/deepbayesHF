@@ -52,7 +52,7 @@ class VariationalOnlineGuassNewton(optimizer.Optimizer):
         beta_2 = self.beta_2
         lam = self.lam
 
-        N = 60000 #float(self.batch_size) # batch size
+        N = self.N #60000 #float(self.batch_size) # batch size
 
         self.posterior_mean = self.model.get_weights()
 
