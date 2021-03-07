@@ -6,6 +6,7 @@ import math
 import numpy as np
 import tensorflow as tf
 from tqdm import trange
+from . import attacks
 
 def propagate_interval(W, b, x_l, x_u, marg=0):
     mu = tf.divide(tf.math.add(x_u, x_l), 2)
@@ -43,6 +44,47 @@ def IBP_state(model, s0, s1, weights, weight_margin=0, logits=True):
             h_u = model.model.layers[i].activation(h_u)
     return h_l, h_u
 
+def IBP_conf(model, s0, s1, weights, weight_margin=0, logits=True):
+    h_l = s0
+    h_u = s1
+    layers = model.model.layers
+    offset = 0
+    for i in range(len(layers)):
+        if(len(layers[i].get_weights()) == 0):
+            h_u = model.model.layers[i](h_u)
+            h_l = model.model.layers[i](h_l)
+            offset += 1
+            continue
+        if(i == len(layers)-1):
+            # iterate over the number of classes:
+            softmax_diffs = []
+            num_classes = np.asarray(weights[(2*(i-offset))+1]).shape[-1]
+            print("number of classes: ", num_classes)
+            for k in range(num_classes):
+                class_diffs = []
+                for l in range(num_classes):
+                    diff = weights[2*(i-offset)][:,k] - weights[2*(i-offset)][:,l]
+                    max_diff = np.maximum(diff, 0)
+                    min_diff = np.minimum(diff, 0)
+                    bias_diff = weights[(2*(i-offset))+1][k] - weights[(2*(i-offset))+1][l]
+                    #logit_diff = (max_diff * h_u) + (min_diff * h_l)  + bias_diff 
+                    logit_diff = np.sum(max_diff * h_u) + np.sum(min_diff * h_l)  + bias_diff 
+                    class_diff = logit_diff 
+                    #print(class_diff)
+                    #if(class_diff == 0.0):
+                    #    print("These should be the same ", k,l)
+                    class_diffs.append(class_diff)
+                diff_val = -np.log(np.sum(np.exp(-1*np.asarray(class_diffs))))
+                #diff_val = np.max(class_diffs)
+                #diff_val = np.max(diff_val)
+                print("Diff value for class ", k, " is ", diff_val)
+                softmax_diffs.append(diff_val)
+            return softmax_diffs
+        w, b = weights[2*(i-offset)], weights[(2*(i-offset))+1]
+        sigma = model.posterior_var[2*(i-offset)]
+        marg = weight_margin*sigma
+        h_l, h_u = propagate_interval(w, b, h_l, h_u, marg=marg)
+    return None #error state if we hit this!
 
 def IBP(model, inp, weights, eps, predict=False):
     h_u = tf.clip_by_value(tf.math.add(inp, eps), 0.0, 1.0)
@@ -172,21 +214,27 @@ def IBP_prob(model, s0, s1, w_marg, samples, predicate, i0=0, inflate=1.0):
     return p, np.squeeze(safe_outputs)
 
 
-def IBP_upper(model, s0, s1, w_marg, samples, predicate, inputs=[], inflate=1.0):
+def IBP_upper(model, s0, s1, w_marg, samples, predicate, loss_fn, eps, inputs=[], inflate=1.0, mod_option=10):
     w_marg = w_marg**2
     safe_weights = []
     safe_outputs = []
-    for i in range(samples):
+    for i in trange(samples, desc="Checking Samples"):
         model.model.set_weights(model.sample(inflate=inflate))
-        checks = []
-        ol, ou = IBP_state(model, s0, s1, model.model.get_weights(), w_marg)
-        checks.append(predicate(np.squeeze(s0), np.squeeze(s1), np.squeeze(ol), np.squeeze(ou)))
-        unsafe = False
+        # Insert attacks here
+        if(i%mod_option == 0):
+            adv = attacks.FGSM(model, s0, loss_fn, eps, direction=-1, num_models=-1, order=1)
+            ol, ou = IBP_state(model, adv, adv, model.model.get_weights(), w_marg)
+            unsafe = predicate(np.squeeze(adv), np.squeeze(adv), np.squeeze(ol), np.squeeze(ou))
+        else:
+            unsafe = False
         for inp in inputs:
+            if(unsafe == True):
+                break
             ol, ou = IBP_state(model, inp, inp, model.model.get_weights(), w_marg)
             if(predicate(np.squeeze(inp), np.squeeze(inp), np.squeeze(ol), np.squeeze(ou))):
                 unsafe = True
                 break
+
         if(unsafe):
             safe_weights.append(model.model.get_weights())
             ol = np.squeeze(ol); ou = np.squeeze(ou)
@@ -197,6 +245,31 @@ def IBP_upper(model, s0, s1, w_marg, samples, predicate, inputs=[], inflate=1.0)
         return 0.0, -1
     p = compute_probability(model, np.swapaxes(np.asarray(safe_weights),1,0), w_marg)
     return p, np.squeeze(safe_outputs)
+
+
+def IBP_uncert(model, s0, s1, w_marg, samples, predicate, i0=0, inflate=1.0):
+    #def predicate_uncertain(iml, imu, ol, ou):
+    # Step 1 : compute the max difference of the logit weights in the softmax layer (clip above 0)
+    # Step 2 : compute the min difference of the logit weights in the softmax layer (clip above 0)
+    # Step 3 : compute the difference in biases for the two classes
+    # Step 4 : affine pass of upper and lower bounds through those values
+    # Step 5 : profit
+    w_marg = w_marg**2
+    safe_weights = []
+    safe_outputs = []
+    for i in range(samples):
+        model.model.set_weights(model.sample(inflate=inflate))
+        checks = []
+        softmax_diff = IBP_conf(model, s0, s1, model.model.get_weights(), w_marg)
+        uncertain = predicate(np.squeeze(s0), np.squeeze(softmax_diff))	
+        if(uncertain):
+            safe_weights.append(model.model.get_weights())
+    print("Found %s safe intervals"%(len(safe_weights)))
+    if(len(safe_weights) < 2):
+        return 0.0, -1
+    p = compute_probability(model, np.swapaxes(np.asarray(safe_weights),1,0), w_marg)
+    return p, np.squeeze(safe_outputs)
+
 
 def IBP_prob_w(model, s0, s1, w_marg, w, predicate, i0=0):
     model.model.set_weights(model.sample())
