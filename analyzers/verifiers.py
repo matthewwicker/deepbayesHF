@@ -8,20 +8,22 @@ import tensorflow as tf
 from tqdm import trange
 from . import attacks
 
-def propagate_interval(W, b, x_l, x_u, marg=0):
-    mu = tf.divide(tf.math.add(x_u, x_l), 2)
-    r = tf.divide(tf.math.subtract(x_u, x_l), 2)
-    mu_new = tf.math.add(tf.matmul(mu, W), b) 
-    try:
-        marg = tf.cast(marg, dtype=tf.float64)
-        W = tf.cast(W, dtype=tf.float64)
-        rad = tf.matmul(r, tf.math.abs(W)+marg) 
-    except:
-        marg = tf.cast(marg, dtype=tf.float32)
-        W = tf.cast(W, dtype=tf.float32)
-        rad = tf.matmul(r, tf.math.abs(W)+marg) 
-    h_u = tf.math.add(mu_new, rad)
-    h_l = tf.math.subtract(mu_new, rad)
+def propagate_interval(W, b, x_l, x_u, marg=0, b_marg=0):
+    #marg = tf.divide(marg, 2)
+    #b_marg = tf.divide(marg, 2)
+    x_mu = tf.divide(tf.math.add(x_u, x_l), 2)
+    x_r =  tf.divide(tf.math.subtract(x_u, x_l), 2)
+    W_mu = tf.cast(W, dtype=tf.float64)
+    W_r =  tf.cast(marg, dtype=tf.float64)
+    b_u =  tf.cast(b + b_marg, dtype=tf.float64)
+    b_l =  tf.cast(b - b_marg, dtype=tf.float64)
+    #h_mu = tf.math.add(tf.matmul(x_mu, W_mu), b_mu)
+    h_mu = tf.matmul(x_mu, W_mu)
+    x_rad = tf.matmul(x_r, tf.math.abs(W_mu))
+    W_rad = tf.matmul(tf.abs(x_mu), W_r)
+    Quad = tf.matmul(tf.abs(x_r), tf.abs(W_r))
+    h_u = tf.add(tf.add(tf.add(tf.add(h_mu, x_rad), W_rad), Quad), b_u)
+    h_l = tf.add(tf.subtract(tf.subtract(tf.subtract(h_mu, x_rad), W_rad), Quad), b_l)
     return h_l, h_u
 
 def IBP_state(model, s0, s1, weights, weight_margin=0, logits=True):
@@ -37,8 +39,10 @@ def IBP_state(model, s0, s1, weights, weight_margin=0, logits=True):
             continue
         w, b = weights[2*(i-offset)], weights[(2*(i-offset))+1]
         sigma = model.posterior_var[2*(i-offset)]
+        b_sigma = model.posterior_var[2*(i-offset)+1]
         marg = weight_margin*sigma
-        h_l, h_u = propagate_interval(w, b, h_l, h_u, marg=marg)
+        b_marg = weight_margin*b_sigma
+        h_l, h_u = propagate_interval(w, b, h_l, h_u, marg=marg, b_marg=b_marg)
         if(i < len(layers)-1):
             h_l = model.model.layers[i].activation(h_l)
             h_u = model.model.layers[i].activation(h_u)
@@ -238,8 +242,6 @@ def IBP_upper(model, s0, s1, w_marg, samples, predicate, loss_fn, eps, inputs=[]
         if(unsafe):
             safe_weights.append(model.model.get_weights())
             ol = np.squeeze(ol); ou = np.squeeze(ou)
-            lower = np.squeeze(s0)[0:len(ol)] + ol; upper = np.squeeze(s1)[0:len(ou)] + ou
-            safe_outputs.append([lower,upper])
     print("Found %s safe intervals"%(len(safe_weights)))
     if(len(safe_weights) < 2):
         return 0.0, -1
