@@ -1,5 +1,4 @@
 #Author: Matthew Wicker
-# Impliments the BayesByBackprop optimizer for BayesKeras
 
 import os
 import math
@@ -18,18 +17,21 @@ from deepbayesHF.optimizers import losses
 from deepbayesHF import analyzers
 from abc import ABC, abstractmethod
 
-# A dumb mistake on my part which needs to be factored out
-def softplus(x):
-     return tf.math.softplus(x)
-
 class Adam(optimizer.Optimizer):
+    """
+    Class that implimens the popular adam optimizer for deepbayes. Extends deepbayes.optimizer
+    """
     def __init__(self):
+        """
+	A call to the optimizer constructor
+	"""
         super().__init__()
 
-    # I set default params for each sub-optimizer but none for the super class for
-    # pretty obvious reasons
     def compile(self, keras_model, loss_fn, batch_size=64, learning_rate=0.15, decay=0.0,
                       epochs=10, prior_mean=-1, prior_var=-1, **kwargs):
+	"""
+	docstring
+	"""
         super().compile(keras_model, loss_fn, batch_size, learning_rate, decay,
                       epochs, prior_mean, prior_var, **kwargs)
 

@@ -1,33 +1,32 @@
 #Author: Matthew Wicker
-import tensorflow as tf
-import tensorflow_probability as tfp
+import os
+import math
 import numpy as np
 
+import tensorflow as tf
+import tensorflow_probability as tfp
 from tensorflow.keras.models import *
 from tensorflow.keras.layers import *
-import math
-import os
 
 from tqdm import tqdm
 from tqdm import trange
 
-"""This class is used for loading posterior models saved via BayesKeras.
-After calling save from any optimizer you can reload your posterior here
-and run analysis on it. See `analyzers` for more information on what
-kinds of analysis you can do. 
-"""
 class PosteriorModel():
-    """This is a class that allows users to reload saved posterior distributions.
-    after saving with any optimizer users can represent the posterior with this 
-    class in order to streamline analysis of the learned model.
+    """
+    This is a class that allows users to reload saved posterior distributions.
+    after saving with any optimizer this calss should represent the posterior
+    in order to perform analysis of the learned model.
 
-    :param path_to_model: A relative or absolute path to a model saved with BayesKeras
-    see the save_model function of the abstract base class `Optimizer` for more info.
-    :type string: str
-    :param deterministic: A boolean value which determines future behavior of the posterior
-    when using analysis functions. This will turn off sampling behavior when computing 
-    gradients, etc. 
-    :type bool: bool, optional
+    Attributes
+    ----------
+    path_to_model : str
+                   A relative or absolute path to a model saved with deepbayes
+                   see the save_model function of the abstract base class `Optimizer`
+                   for more info.
+    deterministic : bool, optional
+		   A boolean value which determines future behavior of the posterior
+                   when using analysis functions. This will turn off sampling behavior
+		   when computing different properties.
     """
     def __init__(self, path_to_model, deterministic=False):
         """Constructor for Class. Reads in model, will throw error if unable
@@ -35,7 +34,7 @@ class PosteriorModel():
         """
         if(os.path.exists(path_to_model+"/var.npy")):
             self.model = tf.keras.models.load_model(path_to_model+'/model.h5')
-            print("BayesKeras detected the above model \n", self.model.summary())
+            print("deepbayes: detected the above model \n", self.model.summary())
             self.det = deterministic
             self.posterior_mean = np.load(path_to_model+"/mean.npy", allow_pickle=True)
             self.posterior_var = np.load(path_to_model+"/var.npy", allow_pickle=True)
@@ -46,9 +45,9 @@ class PosteriorModel():
             self.path_to_model = path_to_model
             self.sample_based = True
             self.det = False
-            print("[INFO] BayesKeras: Attempting to load a sample based posterior")
+            print("deepbayes: Attempting to load a sample based posterior")
             self.model = tf.keras.models.load_model(path_to_model+'/model.h5')
-            print("BayesKeras detected the above model \n", self.model.summary())
+            print("deepbayes: detected the above model \n", self.model.summary())
             self.frequency = np.load(path_to_model + "/freq.npy", allow_pickle=True)
             self.frequency = self.frequency/np.sum(self.frequency)
             self.num_post_samps = len(self.frequency)
@@ -109,6 +108,7 @@ class PosteriorModel():
 
     def _predict(self, input):
         return self.model(input)
+
     def predict_logits(self, input, n=35):
         """Return the mean of the posterior predictive distribution wrt the logits
         we sample the posterior `n` times and returns the mean logit (e.g. pre-softmax) value from each
