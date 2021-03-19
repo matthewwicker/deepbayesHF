@@ -138,3 +138,35 @@ class PosteriorModel():
         
     def set_weights(self, weights):
         self.model.set_weights(weights)
+
+    # First order gradient
+    def gradient(self, inp, loss_fn, direction, num_models=10):
+        gradient_sum = tf.zeros(inp.shape)
+        inp = tf.convert_to_tensor(inp)
+        val = num_models
+        if(num_models < 1):
+            num_models = 1
+        for i in range(num_models):
+            if(self.det or val == -1):
+                no_op = 0
+            else:
+                self.model.set_weights(model.sample())
+            # Establish Gradient Tape Context (for input this time)
+            with tf.GradientTape(persistent=True) as tape:
+                tape.watch(inp)
+                # Get the output
+                predictions = self._predict(inp)
+                loss = loss_fn(direction, predictions)
+            # Get the gradients
+            inp_gradient = tape.gradient(loss, inp)
+            try:
+                gradient_sum += inp_gradient
+            except:
+                gradient_sum += tf.cast(inp_gradient, 'float32')
+            if(model.det or val == -1):
+                break
+        return gradient_sum
+
+    # Special case of gradient
+    def _gradient(self, inp, loss_fn, direction):
+        return self.gradient(inp, loss_fn, direction, -1)
