@@ -29,9 +29,6 @@ class Adam(optimizer.Optimizer):
 
     def compile(self, keras_model, loss_fn, batch_size=64, learning_rate=0.15, decay=0.0,
                       epochs=10, prior_mean=-1, prior_var=-1, **kwargs):
-	"""
-	docstring
-	"""
         super().compile(keras_model, loss_fn, batch_size, learning_rate, decay,
                       epochs, prior_mean, prior_var, **kwargs)
 
