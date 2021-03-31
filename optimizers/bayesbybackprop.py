@@ -184,6 +184,7 @@ class BayesByBackprop(optimizer.Optimizer):
     def save(self, path):
         if not os.path.exists(path):
             os.makedirs(path)
+        super().save(path)
         var = []
         for i in range(len(self.posterior_var)):
             var.append(softplus(self.posterior_var[i]))

@@ -113,3 +113,8 @@ class StochasticGradientDescent(optimizer.Optimizer):
     
     def train(self, X_train, y_train, X_test=None, y_test=None):
         super().train(X_train, y_train, X_test, y_test)
+
+    def save(self, path):
+        super().save(path)
+        np.save(path+"/mean", np.asarray(self.posterior_mean))
+        np.save(path+"/var", np.asarray(self.posterior_mean)*0.0)

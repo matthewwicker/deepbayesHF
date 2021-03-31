@@ -17,4 +17,11 @@ from .swag import StochasticWeightAveragingGaussian as SWAG
 from .hmc import HamiltonianMonteCarlo
 from .hmc import HamiltonianMonteCarlo as HMC
 
+from .sghmc import StochasticGradientHamiltonianMonteCarlo
+from .sghmc import StochasticGradientHamiltonianMonteCarlo as SGHMC
+
+from .sgld import StochasticGradientLangevinDynamics
+from .sgld import StochasticGradientLangevinDynamics as SGLD
+
+
 from .adam import Adam

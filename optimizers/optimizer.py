@@ -244,9 +244,8 @@ class Optimizer(ABC):
     def save(self, path):
         if not os.path.exists(path):
             os.makedirs(path)
-        np.save(path+"/mean", np.asarray(self.posterior_mean))
-        np.save(path+"/var", np.asarray(self.posterior_var))
-
+        #np.save(path+"/mean", np.asarray(self.posterior_mean))
+        #np.save(path+"/var", np.asarray(self.posterior_var))
         self.info = {}
         for k, v in self.__dict__.items():
             if(type(v) == int or type(v) == float):

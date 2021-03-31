@@ -21,24 +21,23 @@ from deepbayesHF.optimizers import losses
 from deepbayesHF import analyzers
 from abc import ABC, abstractmethod
 
-class HamiltonianMonteCarlo(optimizer.Optimizer):
+class StochasticGradientHamiltonianMonteCarlo(optimizer.Optimizer):
     def __init__(self):
         super().__init__()
 
     # I set default params for each sub-optimizer but none for the super class for
     # pretty obvious reasons
-    def compile(self, keras_model, loss_fn, batch_size=-1, learning_rate=0.075, decay=0.0,
+    def compile(self, keras_model, loss_fn, batch_size=512, batches=10, learning_rate=0.075, decay=0.0,
                       epochs=10, prior_mean=-1, prior_var=-1, **kwargs):
         super().compile(keras_model, loss_fn, batch_size, learning_rate, decay,
                       epochs, prior_mean, prior_var, **kwargs)
-        if(batch_size != -1):
-            print("deepbayes Warning: You passed a batch size to HMC which does not accept this parameter.")
         # Now we get into the HMC specific enrichments to the class
         self.burn_in =  kwargs.get('burn_in', 10)
         self.mh_burn =  kwargs.get('mh_burn', False)
         self.m_burn =  kwargs.get('b_m', 0.05)
         self.b_steps = kwargs.get('b_steps', 1)
         self.steps = int(kwargs.get('steps', 5))
+        self.batches = batches
 
         self.preload = kwargs.get('preload', -1)
         if(type(self.preload) != int):
@@ -52,7 +51,6 @@ class HamiltonianMonteCarlo(optimizer.Optimizer):
         self.U_metric = tf.keras.metrics.Mean(name="U_metric")
         self.q = self.posterior_mean
         self.current_q = copy.deepcopy(self.q)
-        #print(self.q)
         self.m = kwargs.get('m', 0.1) #2.0 is optimal for normal training
         self.num_rets = [0] # number of times each iterate in the chain has appeared 
         self.iterate = 0
@@ -127,79 +125,80 @@ class HamiltonianMonteCarlo(optimizer.Optimizer):
     is a method that updates the momentum of the HMC iterate.
     """
     def step(self, features, labels, lrate):
-
-        # Define the GradientTape context
-        with tf.GradientTape(persistent=True) as tape:   # Below we add an extra variable for IBP
-            tape.watch(self.posterior_mean) 
-            predictions = self.model(features)
-            if(self.robust_train == 0):
-                loss = losses.normal_potential_energy(labels, predictions, self.prior_mean,
-                                               self.prior_var, self.q, self.loss_func)
-
-            elif(int(self.robust_train) == 1):
-                # Get the probabilities
+        for features, labels in self.train_ds.take(self.batches):
+            #features, labels = self.train_ds.take()
+            # Define the GradientTape context
+            with tf.GradientTape(persistent=True) as tape:   # Below we add an extra variable for IBP
+                tape.watch(self.posterior_mean) 
                 predictions = self.model(features)
-                logit_l, logit_u = analyzers.IBP(self, features, self.model.trainable_variables, eps=self.epsilon)
-                #!*! TODO: Undo the hardcoding of depth in this function
-                v1 = tf.one_hot(labels, depth=10)
-                v2 = 1 - tf.one_hot(labels, depth=10)
-                worst_case = tf.math.add(tf.math.multiply(v2, logit_u), tf.math.multiply(v1, logit_l))
-                # Now we have the worst case softmax probabilities
-                worst_case = self.model.layers[-1].activation(worst_case)
-                output = (self.robust_lambda * predictions) + ((1-self.robust_lambda) * worst_case)
-                #loss =  self.loss_func(labels, output)
-                loss = losses.normal_potential_energy(labels, predictions, self.prior_mean,
+                if(self.robust_train == 0):
+                    loss = losses.normal_potential_energy(labels, predictions, self.prior_mean,
                                                self.prior_var, self.q, self.loss_func)
 
-            elif(int(self.robust_train) == 2):
-                predictions = self.model(features)
-                features_adv = analyzers.FGSM(self, features, self.attack_loss, eps=self.epsilon, num_models=-1)
-                # Get the probabilities
-                worst_case = self.model(features_adv)
-                # Calculate the loss
-                output = (self.robust_lambda * predictions) + ((1-self.robust_lambda) * worst_case)
-                #loss =  self.loss_func(labels, output)
-                loss = losses.normal_potential_energy(labels, predictions, self.prior_mean,
-                                               self.prior_var, self.q, self.loss_func)
-
-            elif(int(self.robust_train) == 3):
-                output = tf.zeros(predictions.shape)
-                self.epsilon = max(0.0001, self.epsilon )
-                self.eps_dist= tfp.distributions.Exponential(1.0/self.epsilon)
-                for _mc_ in range(self.loss_monte_carlo):
-                    #eps = tfp.random.rayleigh([1], scale=self.epsilon)
-                    eps = self.eps_dist.sample()
-                    logit_l, logit_u = analyzers.IBP(self, features, self.model.trainable_variables, eps=eps)
+                elif(int(self.robust_train) == 1):
+                    # Get the probabilities
+                    predictions = self.model(features)
+                    logit_l, logit_u = analyzers.IBP(self, features, self.model.trainable_variables, eps=self.epsilon)
+                    #!*! TODO: Undo the hardcoding of depth in this function
                     v1 = tf.one_hot(labels, depth=10)
                     v2 = 1 - tf.one_hot(labels, depth=10)
-                    v1 = tf.squeeze(v1); v2 = tf.squeeze(v2)
                     worst_case = tf.math.add(tf.math.multiply(v2, logit_u), tf.math.multiply(v1, logit_l))
+                    # Now we have the worst case softmax probabilities
                     worst_case = self.model.layers[-1].activation(worst_case)
-                    one_hot_cls = tf.one_hot(labels, depth=10)
-                    output += (1.0/self.loss_monte_carlo) * worst_case
-                loss = losses.normal_potential_energy(labels, predictions, self.prior_mean,
-                                               self.prior_var, self.q, self.loss_func)     
-            elif(int(self.robust_train) == 4):
-                predictions = self.model(features)
-                self.epsilon = max(0.0001, self.epsilon)
-                self.eps_dist = tfp.distributions.Exponential(1.0/self.epsilon)
-                output = tf.zeros(predictions.shape)
-                for _mc_ in range(self.loss_monte_carlo):
-                    #eps = tfp.random.rayleigh([1], scale=self.epsilon)
-                    eps = self.eps_dist.sample()
+                    output = (self.robust_lambda * predictions) + ((1-self.robust_lambda) * worst_case)
+                    #loss =  self.loss_func(labels, output)
+                    loss = losses.normal_potential_energy(labels, predictions, self.prior_mean,
+                                               self.prior_var, self.q, self.loss_func)
+
+                elif(int(self.robust_train) == 2):
+                    predictions = self.model(features)
                     features_adv = analyzers.FGSM(self, features, self.attack_loss, eps=self.epsilon, num_models=-1)
+                    # Get the probabilities
                     worst_case = self.model(features_adv)
-                    output += (1.0/self.loss_monte_carlo) * worst_case
-                loss = losses.normal_potential_energy(labels, predictions, self.prior_mean,
+                    # Calculate the loss
+                    output = (self.robust_lambda * predictions) + ((1-self.robust_lambda) * worst_case)
+                    #loss =  self.loss_func(labels, output)
+                    loss = losses.normal_potential_energy(labels, predictions, self.prior_mean,
+                                               self.prior_var, self.q, self.loss_func)
+
+                elif(int(self.robust_train) == 3):
+                    output = tf.zeros(predictions.shape)
+                    self.epsilon = max(0.0001, self.epsilon )
+                    self.eps_dist= tfp.distributions.Exponential(1.0/self.epsilon)
+                    for _mc_ in range(self.loss_monte_carlo):
+                        #eps = tfp.random.rayleigh([1], scale=self.epsilon)
+                        eps = self.eps_dist.sample()
+                        logit_l, logit_u = analyzers.IBP(self, features, self.model.trainable_variables, eps=eps)
+                        v1 = tf.one_hot(labels, depth=10)
+                        v2 = 1 - tf.one_hot(labels, depth=10)
+                        v1 = tf.squeeze(v1); v2 = tf.squeeze(v2)
+                        worst_case = tf.math.add(tf.math.multiply(v2, logit_u), tf.math.multiply(v1, logit_l))
+                        worst_case = self.model.layers[-1].activation(worst_case)
+                        one_hot_cls = tf.one_hot(labels, depth=10)
+                        output += (1.0/self.loss_monte_carlo) * worst_case
+                    loss = losses.normal_potential_energy(labels, predictions, self.prior_mean,
+                                               self.prior_var, self.q, self.loss_func)     
+                elif(int(self.robust_train) == 4):
+                    predictions = self.model(features)
+                    self.epsilon = max(0.0001, self.epsilon)
+                    self.eps_dist = tfp.distributions.Exponential(1.0/self.epsilon)
+                    output = tf.zeros(predictions.shape)
+                    for _mc_ in range(self.loss_monte_carlo):
+                        #eps = tfp.random.rayleigh([1], scale=self.epsilon)
+                        eps = self.eps_dist.sample()
+                        features_adv = analyzers.FGSM(self, features, self.attack_loss, eps=self.epsilon, num_models=-1)
+                        worst_case = self.model(features_adv)
+                        output += (1.0/self.loss_monte_carlo) * worst_case
+                    loss = losses.normal_potential_energy(labels, predictions, self.prior_mean,
                                                self.prior_var, self.q, self.loss_func)     
 
-        # Get the gradients
-        weight_gradient = tape.gradient(loss, self.model.trainable_variables)
-        temp_p = []
-        for i in range(len(weight_gradient)):
-            wg = tf.math.multiply(weight_gradient[i], lrate)
-            temp_p.append(tf.math.add(self.p[i], wg)) # maybe come back and make this subtraction
-        self.p = np.asarray(temp_p)
+            # Get the gradients
+            weight_gradient = tape.gradient(loss, self.model.trainable_variables)
+            temp_p = []
+            for i in range(len(weight_gradient)):
+                wg = tf.math.multiply(weight_gradient[i], lrate/self.batches)
+                temp_p.append(tf.math.add(self.p[i], wg)) # maybe come back and make this subtraction
+            self.p = np.asarray(temp_p)
 
         self.train_loss(loss)
         self.train_metric(labels, predictions)
@@ -236,14 +235,16 @@ class HamiltonianMonteCarlo(optimizer.Optimizer):
     def train(self, X_train, y_train, X_test=None, y_test=None):
         # We generate this only to speed up parallel computations of the test statistics
         # if there are any to compute
-        test_ds = tf.data.Dataset.from_tensor_slices((X_test, y_test)).batch(256)
-    
+        self.num_batches = int(len(X_train)/self.batch_size)
+        self.train_ds = tf.data.Dataset.from_tensor_slices((X_train, y_train)).shuffle(100).batch(self.batch_size)
+        test_ds = tf.data.Dataset.from_tensor_slices((X_test, y_test)).batch(self.batch_size)
+
         # Open with a user warning about potential memory constraints of their process:
-        s = (self.burn_in + self.epochs) * (sys.getsizeof(self.model.get_weights())/1000000)
-        warn = """BayesKeras Warning: HMC is a memory hungry optimizer. 
-         Given you system and parameters of this training run,
-         we expect your system to need %s MB of available memory"""%(s) 
-        print(warn)
+        #s = (self.burn_in + self.epochs) * (sys.getsizeof(self.model.get_weights())/1000000)
+        #warn = """BayesKeras Warning: HMC is a memory hungry optimizer. 
+        # Given you system and parameters of this training run,
+        # we expect your system to need %s MB of available memory"""%(s) 
+        #print(warn)
 
         if(self.robust_linear):
             self.max_eps = self.epsilon

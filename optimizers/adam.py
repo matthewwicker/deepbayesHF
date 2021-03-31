@@ -157,3 +157,8 @@ class Adam(optimizer.Optimizer):
 
     def sample(self):
         return self.model.get_weights()
+
+    def save(self, path):
+        super().save(path)
+        np.save(path+"/mean", np.asarray(self.posterior_mean))
+        np.save(path+"/var", np.asarray(self.posterior_mean)*0.0)

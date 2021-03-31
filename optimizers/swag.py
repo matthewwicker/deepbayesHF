@@ -174,6 +174,7 @@ class StochasticWeightAveragingGaussian(optimizer.Optimizer):
 
     def save(self, path):
         self.get_posterior()
+        super().save(path)
         if not os.path.exists(path):
             os.makedirs(path)
         np.save(path+"/mean", np.asarray(self.posterior_mean, dtype=object))
