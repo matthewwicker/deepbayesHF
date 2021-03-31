@@ -32,9 +32,13 @@ class StochasticGradientLangevinDynamics(optimizer.Optimizer):
                       epochs=10, prior_mean=-1, prior_var=-1, **kwargs):
         super().compile(keras_model, loss_fn, batch_size, learning_rate, decay,
                       epochs, prior_mean, prior_var, **kwargs)
-        # Now we get into the SGD specific enrichments to the class
-        self.posterior_var = [tf.zeros(self.posterior_var[i].shape) for i in range(len(self.posterior_var))]
-        
+
+        self.burn_in =  kwargs.get('burn_in', 10)
+        self.mh_burn =  kwargs.get('mh_burn', False)
+        self.m_burn =  kwargs.get('b_m', 0.05)
+        self.b_steps = kwargs.get('b_steps', 1)
+        self.posterior_samples = []
+        self.num_rets = [] # This is the frequency array, but naming is currently consistent with HMC methods
         return self
 
     def step(self, features, labels, lrate):
@@ -99,7 +103,7 @@ class StochasticGradientLangevinDynamics(optimizer.Optimizer):
         new_weights = []
         for i in range(len(weight_gradient)):
             wg = tf.math.multiply(weight_gradient[i], lrate)
-            eta = tf.random.normal(weight_gradient[i].shape, mean=0.0, stddev=lrate*2)
+            eta = tf.random.normal(weight_gradient[i].shape, mean=0.0, stddev=lrate*2*weight_gradient[i])
             wg = tf.math.add(wg, eta)
             m = tf.math.subtract(weights[i], wg)
             new_weights.append(m)
@@ -114,9 +118,57 @@ class StochasticGradientLangevinDynamics(optimizer.Optimizer):
 
     
     def train(self, X_train, y_train, X_test=None, y_test=None):
-        super().train(X_train, y_train, X_test, y_test)
+        self.num_batches = int(len(X_train)/self.batch_size)
+        train_ds = tf.data.Dataset.from_tensor_slices((X_train, y_train)).shuffle(100).batch(self.batch_size)
+        test_ds = tf.data.Dataset.from_tensor_slices((X_test, y_test)).batch(self.batch_size)
+
+        if(self.robust_linear):
+            self.max_eps = self.epsilon
+            self.epsilon = 0.0
+            self.max_robust_lambda = self.robust_lambda
+
+        lr = self.learning_rate; decay = self.decay
+        for epoch in range(self.epochs):
+            lrate = self.learning_rate * (1 / (1 + self.decay * epoch))
+
+            # Run the model through train and test sets respectively
+            for (features, labels) in tqdm(train_ds):
+                features += np.random.normal(loc=0.0, scale=self.input_noise, size=features.shape)
+                self.posterior_mean, _ = self.step(features, labels, lrate)
+            self.num_rets.append(1)
+            self.posterior_samples.append(self.posterior_mean)
+
+            for test_features, test_labels in test_ds:
+                self.model_validate(test_features, test_labels)
+                
+            # Grab the results
+            (loss, acc) = self.train_loss.result(), self.train_metric.result()
+            (val_loss, val_acc) = self.valid_loss.result(), self.valid_metric.result()
+            self.logging(loss, acc, val_loss, val_acc, epoch)
+            
+            # Clear the current state of the metrics
+            self.train_loss.reset_states(), self.train_metric.reset_states()
+            self.valid_loss.reset_states(), self.valid_metric.reset_states()
+            self.extra_metric.reset_states()
+            
+            if(self.robust_linear):
+                self.epsilon += self.max_eps/self.epochs
 
     def save(self, path):
-        super().save(path)
+        if(self.num_rets[0] == 0):
+            self.num_rets = self.num_rets[1:]
+        if not os.path.exists(path):
+            os.makedirs(path)
+        if not os.path.exists(path+"/samples"):
+            os.makedirs(path+"/samples")
         np.save(path+"/mean", np.asarray(self.posterior_mean))
-        np.save(path+"/var", np.asarray(self.posterior_mean)*0.0)
+        for i in range(len(self.posterior_samples)):
+            np.save(path+"/samples/sample_%s"%(i), np.asarray(self.posterior_samples[i]))
+        self.model.save(path+'/model.h5')
+        np.save(path+"/freq",np.asarray(self.num_rets))
+        model_json = self.model.to_json()
+        with open(path+"/arch.json", "w") as json_file:
+            json_file.write(model_json)
+        super().save(path)
+        
+
