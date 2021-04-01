@@ -157,14 +157,14 @@ class VariationalOnlineGuassNewton(optimizer.Optimizer):
         super().save(path)
         save_var = []
         for i in range(len(self.posterior_var)):
-            #var = tf.math.reciprocal(tf.math.sqrt(self.N*self.posterior_var[i]))
-            var = tf.math.reciprocal(self.N*self.posterior_var[i])
+            var = tf.math.reciprocal(tf.math.sqrt(self.N*self.posterior_var[i]))
+            #var = tf.math.reciprocal(self.N*self.posterior_var[i])
             save_var.append(var)
-        temp_var = copy.deepcopy(self.posterior_var)
-        self.posterior_var = save_var
-        self.posterior_var = temp_var
+        #temp_var = copy.deepcopy(self.posterior_var)
+        #self.posterior_var = save_var
+        #self.posterior_var = temp_var
         np.save(path+"/mean", np.asarray(self.posterior_mean))
-        np.save(path+"/var", np.asarray(self.posterior_var))
+        np.save(path+"/var", np.asarray(save_var))
 
     def sample(self):
         sampled_weights = []

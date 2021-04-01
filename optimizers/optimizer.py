@@ -152,13 +152,15 @@ class Optimizer(ABC):
         else:
             v_loss = self.loss_func(labels, predictions)
             worst_case = predictions
+        if(self.mode == 'regression'):
+            labels = tf.reshape(labels, predictions.shape)
         self.valid_metric(labels, predictions)
         self.valid_loss(v_loss)
         #self.valid_rob(labels, worst_case)
 
     def logging(self, loss, acc, val_loss, val_acc, epoch):
-        # Local logging
-        tag = 'mse'
+        # Command Line Print Logging
+        tag = 'acc'
         if(self.mode == 'regression'):
             tag = 'err'
         if(self.robust_train == 0):

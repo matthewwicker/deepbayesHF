@@ -23,5 +23,8 @@ from .sghmc import StochasticGradientHamiltonianMonteCarlo as SGHMC
 from .sgld import StochasticGradientLangevinDynamics
 from .sgld import StochasticGradientLangevinDynamics as SGLD
 
+from .csgld import CyclicStochasticGradientLangevinDynamics
+from .csgld import CyclicStochasticGradientLangevinDynamics as CSGLD
+
 
 from .adam import Adam
