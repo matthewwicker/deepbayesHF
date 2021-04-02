@@ -328,6 +328,7 @@ def chernoff_bound_verification(model, inp, eps, cls, **kwargs):
     return softmax
     #print("Not yet implimented")
 
+
 """
 property - a function that takes a vector and returns a boolean if it was successful
 """
@@ -375,3 +376,71 @@ def massart_bound_check(model, inp, eps, cls, **kwargs):
         print("Exited becuase %s >= %s"%(iterations, halting_bound))
     return successes/iterations
     #return None
+
+
+
+
+
+def chernoff_model_robustness(model, input_0, input_1=None, verify=True, **kwargs):
+    """
+    Function to compute the model robustness of a given Bayesian posterior
+    with statistically guarenteed precision via Chernoff concentration
+    """
+    return None
+
+def chernoff_decision_robustness(model, input_0, input_1=None, verify=True, **kwargs):
+    """
+    Function to compute the decision robustness of a given Bayesian posterior
+    with statistically guarenteed precision via Chernoff concentration
+    """
+    return None
+
+def massart_model_robustness(model, input_0, input_1=None, verify=True, **kwargs):
+    """
+    Function to compute the model robustness of a given Bayesian posterior
+    with statistically guarenteed precision via Chernoff concentration
+    """
+    return None
+
+def massart_decision_robustness(model, input_0, input_1=None, verify=True, **kwargs):
+    """
+    Function to compute the decision robustness of a given Bayesian posterior
+    with statistically guarenteed precision via Chernoff concentration
+    """
+    return None
+
+def model_robustness_lower(model, input_0, input_1=None, verify=True, **kwargs):
+    """
+    Function to compute a guarenteed probabalistic lower bound on the model robustness
+    of a Bayesian posterior distribution
+    """
+    return None
+
+def model_robustness_upper(model, input_0, input_1=None, verify=True, **kwargs):
+    """
+    Function to compute a guarenteed probabalistic lower bound on the model robustness
+    of a Bayesian posterior distribution
+    """
+    return None
+
+def decision_robustness_lower(model, input_0, input_1=None, verify=True, **kwargs):
+    """
+    Function to compute a guarenteed probabalistic lower bound on the model robustness
+    of a Bayesian posterior distribution
+    """
+    return None
+
+def decision_robustness_upper(model, input_0, input_1=None, verify=True, **kwargs):
+    """
+    Function to compute a guarenteed probabalistic lower bound on the model robustness
+    of a Bayesian posterior distribution
+    """
+    return None
+
+
+def log_confidence_upper(model, input_0, input_1=None, verify=True, **kwargs):
+    """
+    Function to compute an upper bound on the log confidence of a model decision from a
+    BNN
+    """
+    return None
