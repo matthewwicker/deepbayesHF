@@ -3,7 +3,7 @@ import sklearn
 from sklearn import datasets
 from sklearn.preprocessing import StandardScaler
 
-X_train, y_train = sklearn.datasets.make_regression(n_samples=1000, n_features=10)
+X_train, y_train = sklearn.datasets.make_regression(n_samples=500, n_features=10)
 X_test, y_test = X_train[0:300], y_train[0:300]
 #X_train, y_train = datasets.load_diabetes(return_X_y=True)
 #X_test, y_test = datasets.load_diabetes(return_X_y=True)
@@ -34,7 +34,7 @@ likelihood = tf.keras.losses.MeanSquaredError()
 WIDTH = 128
 model = Sequential()
 model.add(Dense(WIDTH, activation="linear", input_shape=(1, 10)))
-model.add(Dense(WIDTH, activation="linear"))
+#model.add(Dense(WIDTH, activation="linear"))
 #model.add(Dense(WIDTH, activation="tanh"))
 model.add(Dense(1, activation="linear"))
 
@@ -100,16 +100,22 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-print("\n\n\n\n")
-print("REGRESSION INFERENCE TEST RESULTS:")
-print("======================================= \n")
+f = open('build_status.log', 'w+')
+print("\n\n"); f.write("\n\n")
+print("REGRESSION INFERENCE TEST RESULTS:"); f.write("REGRESSION INFERENCE TEST RESULTS:\n")
+print("======================================= \n"); f.write("======================================= \n")
 index = 0
 for key, inference in inference_dict.items():
     if(pass_fail[index] == "PASSED"):
         print(f"INFERENCE METHOD {bcolors.OKGREEN}\t [ %s ] \t \t PASSED {bcolors.ENDC}"%(key))
+        f.write(f"INFERENCE METHOD {bcolors.OKGREEN}\t [ %s ] \t \t PASSED {bcolors.ENDC} \n"%(key))
     elif(pass_fail[index] == "FAILED"):
         print(f"INFERENCE METHOD {bcolors.FAIL}\t [ %s ] \t \t FAILED (Error) {bcolors.ENDC}"%(key))
+        f.write(f"INFERENCE METHOD {bcolors.FAIL}\t [ %s ] \t \t FAILED (Error) {bcolors.ENDC}\n"%(key))
     elif(pass_fail[index] == "FAILEDT"):
-        print(f"INFERENCE METHOD {bcolors.WARNING}\t [ %s ] \t \t WORKING (Warning: High Error) {bcolors.ENDC}"%(key))
+        print(f"INFERENCE METHOD {bcolors.WARNING}\t [ %s ] \t \t WORKING (Warning: High Test Loss) {bcolors.ENDC}"%(key))
+        f.write(f"INFERENCE METHOD {bcolors.WARNING}\t [ %s ] \t \t WORKING (Warning: High Test Loss) {bcolors.ENDC} \n"%(key))
     index += 1
-print("\n\n\n\n")
+print("\n\n"); f.write("\n\n")
+
+f.close() 

@@ -76,16 +76,24 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-print("\n\n\n\n")
-print("CLASSIFICATION INFERENCE TEST RESULTS:")
-print("======================================= \n")
+f = open('build_status.log', 'a')
+
+print("\n\n"); f.write("\n\n")
+print("CLASSIFICATION INFERENCE TEST RESULTS:"); f.write("CLASSIFICATION INFERENCE TEST RESULTS:\n")
+print("======================================= \n"); f.write("======================================= \n")
 index = 0
 for key, inference in inference_dict.items():
     if(pass_fail[index] == "PASSED"):
         print(f"INFERENCE METHOD {bcolors.OKGREEN}\t [ %s ] \t \t PASSED {bcolors.ENDC}"%(key))
+        f.write(f"INFERENCE METHOD {bcolors.OKGREEN}\t [ %s ] \t \t PASSED {bcolors.ENDC} \n"%(key))
     elif(pass_fail[index] == "FAILED"):
         print(f"INFERENCE METHOD {bcolors.FAIL}\t [ %s ] \t \t FAILED (Error) {bcolors.ENDC}"%(key))
+        f.write(f"INFERENCE METHOD {bcolors.FAIL}\t [ %s ] \t \t FAILED (Error) {bcolors.ENDC}\n"%(key))
     elif(pass_fail[index] == "FAILEDT"):
         print(f"INFERENCE METHOD {bcolors.WARNING}\t [ %s ] \t \t WORKING (Warning: Low Test Acc) {bcolors.ENDC}"%(key))
+        f.write(f"INFERENCE METHOD {bcolors.WARNING}\t [ %s ] \t \t WORKING (Warning: Low Test Acc) {bcolors.ENDC} \n"%(key))
     index += 1
-print("\n\n\n\n")
+print("\n\n"); f.write("\n\n")
+
+f.close() 
+
