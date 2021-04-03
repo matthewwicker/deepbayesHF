@@ -11,6 +11,8 @@ from tensorflow.keras.models import *
 from tensorflow.keras.layers import *
 
 # Imports for Bayesian deep learning
+import sys
+sys.path.append('../..')
 import deepbayesHF
 from deepbayesHF import optimizers
 from deepbayesHF import PosteriorModel
